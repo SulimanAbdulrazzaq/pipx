@@ -240,6 +240,42 @@ def test_reinstall_pinned_package(capsys: pytest.CaptureFixture[str]) -> None:
     assert "installed package black" in captured.out
 
 
+@pytest.mark.parametrize("command", [["reinstall", "pycowsay"], ["reinstall-all"]])
+@pytest.mark.usefixtures("pipx_temp_env")
+def test_reinstall_json_stays_valid_with_injected_packages(
+    root: Path,
+    empty_project: Path,
+    capsys: pytest.CaptureFixture[str],
+    command: list[str],
+) -> None:
+    find_links: Final[Path] = root / ".pipx_tests" / "package_cache" / PACKAGE_CACHE_DIR_NAME
+    pip_args: Final[str] = f"--pip-args=--no-index --find-links={find_links}"
+    assert not run_pipx_cli(["install", pip_args, "pycowsay"])
+    assert not run_pipx_cli(["inject", pip_args, "pycowsay", str(empty_project)])
+    capsys.readouterr()
+
+    assert not run_pipx_cli([command[0], "--python", sys.executable, "--output", "json", *command[1:]])
+
+    assert json.loads(capsys.readouterr().out)["status"] == "success"
+
+
+@pytest.mark.usefixtures("pipx_temp_env")
+def test_reinstall_reports_injected_packages(
+    root: Path,
+    empty_project: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    find_links: Final[Path] = root / ".pipx_tests" / "package_cache" / PACKAGE_CACHE_DIR_NAME
+    pip_args: Final[str] = f"--pip-args=--no-index --find-links={find_links}"
+    assert not run_pipx_cli(["install", pip_args, "pycowsay"])
+    assert not run_pipx_cli(["inject", pip_args, "pycowsay", str(empty_project)])
+    capsys.readouterr()
+
+    assert not run_pipx_cli(["reinstall", "--python", sys.executable, "pycowsay"])
+
+    assert "injected package empty-project into venv pycowsay" in capsys.readouterr().out
+
+
 @pytest.mark.usefixtures("pipx_temp_env")
 def test_reinstall_all_quiet_says_nothing(capsys: pytest.CaptureFixture[str]) -> None:
     assert not run_pipx_cli(["install", "pycowsay"])

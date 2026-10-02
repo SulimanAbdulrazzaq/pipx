@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Final
 
 import pytest
 
-from helpers import remove_venv_interpreter, run_pipx_cli
+from helpers import PACKAGE_CACHE_DIR_NAME, remove_venv_interpreter, run_pipx_cli
 from pipx import paths, util
 
 if TYPE_CHECKING:
@@ -220,4 +220,22 @@ def test_repair_json_stays_pure_when_it_reinstalls(capsys: pytest.CaptureFixture
 
     captured = capsys.readouterr()
     document = json.loads(captured.out)  # the internal reinstall must not print human text before this
+    assert (document["command"], document["status"], captured.err) == (["repair"], "success", "")
+
+
+@pytest.mark.usefixtures("pipx_temp_env")
+def test_repair_json_stays_pure_when_it_reinjects_packages(
+    root: Path, empty_project: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    find_links: Final[Path] = root / ".pipx_tests" / "package_cache" / PACKAGE_CACHE_DIR_NAME
+    pip_args: Final[str] = f"--pip-args=--no-index --find-links={find_links}"
+    assert not run_pipx_cli(["install", pip_args, "pycowsay"])
+    assert not run_pipx_cli(["inject", pip_args, "pycowsay", str(empty_project)])
+    remove_venv_interpreter("pycowsay")
+    capsys.readouterr()
+
+    assert not run_pipx_cli(["repair", "--python", sys.executable, "--output", "json"])
+
+    captured = capsys.readouterr()
+    document = json.loads(captured.out)  # re-injecting packages must not print human text before this
     assert (document["command"], document["status"], captured.err) == (["repair"], "success", "")
