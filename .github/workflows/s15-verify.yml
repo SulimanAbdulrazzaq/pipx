@@ -1,0 +1,44 @@
+name: s15-verify
+on: push
+
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Which tree is under test
+        run: git log -3 --format='%H %T %s'
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install tox
+        run: uv tool install --python-preference only-managed --python 3.14 "tox>=4.45" --with tox-uv
+      - name: Setup test suite
+        run: tox run -vv --notest --skip-missing-interpreters false -e 3.12
+      - name: Seed package cache
+        run: tox exec -e 3.12 -- python scripts/update_package_cache.py testdata/tests_packages .pipx_tests/package_cache/
+      - name: New tests
+        run: tox exec -e 3.12 -- python -m pytest tests/test_reinstall.py tests/test_health.py -k "test_reinstall_json_stays_valid_with_injected_packages or test_reinstall_reports_injected_packages or test_repair_json_stays_pure_when_it_reinjects_packages" -vv -p no:cacheprovider
+      - name: Full test suite (upstream command)
+        run: tox run --skip-pkg-install -e 3.12
+        env:
+          PYTEST_ADDOPTS: "-vv --durations=20"
+
+  lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+      - name: Install tox
+        run: uv tool install --python-preference only-managed --python 3.14 "tox>=4.45" --with tox-uv
+      - name: pre-commit on all files (tox -e lint)
+        run: tox run -e lint
+      - name: Type check (tox -e type)
+        run: tox run -e type
